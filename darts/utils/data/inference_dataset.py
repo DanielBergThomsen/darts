@@ -65,7 +65,8 @@ class InferenceDataset(ABC, Dataset):
         if main_covariate_type is CovariateType.PAST:
             future_end = past_end + max(0, n - output_chunk_length) * target_series.freq
         else:  # CovariateType.FUTURE
-            future_end = past_end + max(n, output_chunk_length) * target_series.freq
+            # Changed to allow future covariates to extend past prediction horizons
+            future_end = covariate_series.time_index[-1]
 
         future_start = (
             past_end + target_series.freq if future_end != past_end else future_end
