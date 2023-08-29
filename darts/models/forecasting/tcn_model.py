@@ -4,7 +4,7 @@ Temporal Convolutional Network
 """
 
 import math
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -13,8 +13,6 @@ import torch.nn.functional as F
 from darts.logging import get_logger, raise_if_not
 from darts.models.forecasting.pl_forecasting_module import PLPastCovariatesModule
 from darts.models.forecasting.torch_forecasting_model import PastCovariatesTorchModel
-from darts.timeseries import TimeSeries
-from darts.utils.data import PastCovariatesShiftedDataset
 from darts.utils.torch import MonteCarloDropout
 
 logger = get_logger(__name__)
@@ -79,7 +77,9 @@ class _ResidualBlock(nn.Module):
         self.nr_blocks_below = nr_blocks_below
 
         input_dim = input_size if nr_blocks_below == 0 else num_filters
-        output_dim = target_size if nr_blocks_below == num_layers - 1 else num_filters
+        self.output_dim = (
+            target_size if nr_blocks_below == num_layers - 1 else num_filters
+        )
         self.conv1 = nn.Conv1d(
             input_dim,
             num_filters,
@@ -88,7 +88,7 @@ class _ResidualBlock(nn.Module):
         )
         self.conv2 = nn.Conv1d(
             num_filters,
-            output_dim,
+            self.output_dim,
             kernel_size,
             dilation=(dilation_base**nr_blocks_below),
         )
@@ -97,8 +97,8 @@ class _ResidualBlock(nn.Module):
                 self.conv1
             ), nn.utils.weight_norm(self.conv2)
 
-        if input_dim != output_dim:
-            self.conv3 = nn.Conv1d(input_dim, output_dim, 1)
+        if input_dim != self.output_dim:
+            self.conv3 = nn.Conv1d(input_dim, self.output_dim, 1)
 
     def forward(self, x):
         residual = x
@@ -140,7 +140,6 @@ class _TCNModule(PLPastCovariatesModule):
         dropout: float,
         **kwargs
     ):
-
         """PyTorch module implementing a dilated TCN module used in `TCNModel`.
 
 
@@ -230,6 +229,10 @@ class _TCNModule(PLPastCovariatesModule):
             )
             self.res_blocks_list.append(res_block)
         self.res_blocks = nn.ModuleList(self.res_blocks_list)
+        self.linear = nn.Linear(
+            self.input_chunk_length * self.target_size * self.nr_params,
+            self.output_chunk_length * self.target_size * self.nr_params,
+        )
 
     def forward(self, x_in: Tuple):
         x, _ = x_in
@@ -240,12 +243,9 @@ class _TCNModule(PLPastCovariatesModule):
         for res_block in self.res_blocks_list:
             x = res_block(x)
 
-        x = x.transpose(1, 2)
-        x = x.view(
-            batch_size, self.input_chunk_length, self.target_size, self.nr_params
+        return self.linear(x.flatten(start_dim=1, end_dim=-1)).view(
+            batch_size, self.output_chunk_length, self.target_size, self.nr_params
         )
-
-        return x
 
     @property
     def first_prediction_index(self) -> int:
@@ -265,7 +265,6 @@ class TCNModel(PastCovariatesTorchModel):
         dropout: float = 0.2,
         **kwargs
     ):
-
         """Temporal Convolutional Network Model (TCN).
 
         This is an implementation of a dilated TCN used for forecasting, inspired from [1]_.
@@ -473,21 +472,4 @@ class TCNModel(PastCovariatesTorchModel):
             dropout=self.dropout,
             weight_norm=self.weight_norm,
             **self.pl_module_params,
-        )
-
-    def _build_train_dataset(
-        self,
-        target: Sequence[TimeSeries],
-        past_covariates: Optional[Sequence[TimeSeries]],
-        future_covariates: Optional[Sequence[TimeSeries]],
-        max_samples_per_ts: Optional[int],
-    ) -> PastCovariatesShiftedDataset:
-
-        return PastCovariatesShiftedDataset(
-            target_series=target,
-            covariates=past_covariates,
-            length=self.input_chunk_length,
-            shift=self.output_chunk_length,
-            max_samples_per_ts=max_samples_per_ts,
-            use_static_covariates=self.uses_static_covariates,
         )
