@@ -160,7 +160,13 @@ class TrainingDataset(ABC, Dataset):
 
                 # extract the index position (index) from index value
                 covariate_start = covariate_series.time_index.get_loc(start_time)
-                covariate_end = covariate_series.time_index.get_loc(end_time) + 1
+
+                # THIS LINE IS A HACK
+                # It makes future covariates use input_chunk_length as the indexing 
+                # length
+                # This is because we wanted to be able to look beyond 
+                # output_chunk_length in our future_covariates
+                covariate_end = covariate_end = covariate_start + input_chunk_length if covariate_type is CovariateType.FUTURE else covariate_series.time_index.get_loc(end_time) + 1
 
             # store position of initial sample and all relevant sub set indices
             self._index_memory[target_idx] = {
