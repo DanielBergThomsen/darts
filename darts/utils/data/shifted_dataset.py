@@ -649,12 +649,7 @@ class GenericShiftedDataset(TrainingDataset):
             ]
 
             raise_if_not(
-                len(covariate)
-                == (
-                    self.output_chunk_length
-                    if self.shift_covariates
-                    else self.input_chunk_length
-                ),
+                len(covariate) == self.input_chunk_length,
                 f"The dataset contains {main_covariate_type.value} covariates "
                 f"whose time axis doesn't allow to obtain the input (or output) chunk relative to the "
                 f"target series.",
