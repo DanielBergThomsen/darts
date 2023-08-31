@@ -166,7 +166,7 @@ class TrainingDataset(ABC, Dataset):
                 # length
                 # This is because we wanted to be able to look beyond 
                 # output_chunk_length in our future_covariates
-                covariate_end = covariate_end = covariate_start + input_chunk_length if covariate_type is CovariateType.FUTURE else covariate_series.time_index.get_loc(end_time) + 1
+                covariate_end = covariate_start + input_chunk_length if covariate_type is CovariateType.FUTURE else covariate_series.time_index.get_loc(end_time) + 1
 
             # store position of initial sample and all relevant sub set indices
             self._index_memory[target_idx] = {
